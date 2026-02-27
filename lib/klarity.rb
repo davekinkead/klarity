@@ -5,6 +5,7 @@ require_relative 'klarity/analyzer'
 require_relative 'klarity/file_scanner'
 require_relative 'klarity/dependency_graph'
 require_relative 'klarity/visitor'
+require_relative 'klarity/web_generator'
 
 module Klarity
   class Error < StandardError; end

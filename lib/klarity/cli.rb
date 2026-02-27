@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'web_generator'
 
 module Klarity
   class CLIError < Error; end
@@ -15,18 +16,21 @@ module Klarity
         --exclude PATTERN   Glob pattern to exclude files
         --include PATTERN   Glob pattern to include files
         --json              Output as JSON
+        --html              Generate interactive HTML visualization
         --help, -h          Show this help message
 
       Examples:
         klarity ./app
         klarity ~/projects/myapp/app --exclude "*/concerns/*"
         klarity ./app --json
+        klarity ./app --html
     USAGE
 
     def initialize(args)
       @args = args
       @options = {}
       @json_output = false
+      @html_output = false
     end
 
     def run
@@ -41,6 +45,8 @@ module Klarity
       parse_options!
 
       result = Klarity.analyze(directory, **@options)
+
+      return generate_html(result) if @html_output
 
       @json_output ? JSON.generate(result) : result
     end
@@ -62,9 +68,33 @@ module Klarity
           @options[:include_patterns] << @args.shift
         when '--json'
           @json_output = true
+        when '--html'
+          @html_output = true
         else
           raise CLIError, "Unknown option: #{option}"
         end
+      end
+    end
+
+    def generate_html(data)
+      file_path = WebGenerator.generate(data)
+
+      puts "Analysis saved to: #{file_path}"
+      puts 'Opening in browser...'
+
+      open_browser(file_path)
+
+      file_path
+    end
+
+    def open_browser(file_path)
+      case RbConfig::CONFIG['host_os']
+      when /darwin|mac os/
+        system("open '#{file_path}'")
+      when /linux/
+        system("xdg-open '#{file_path}'")
+      when /mswin|mingw|cygwin/
+        system("start '' '#{file_path}'")
       end
     end
   end

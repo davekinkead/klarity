@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Klarity: Dependency Graph Analysis</title>
+  <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
+    
+    #controls {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      z-index: 1000;
+      width: 250px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    
+    #controls h2 { font-size: 16px; margin-bottom: 12px; color: #333; }
+    
+    .filter-section { margin-bottom: 12px; }
+    .filter-section label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #555; }
+    
+    .checkbox-group label { 
+      display: flex; 
+      align-items: center; 
+      font-size: 12px; 
+      margin-bottom: 4px; 
+      cursor: pointer; 
+    }
+    .checkbox-group input { margin-right: 6px; }
+    
+    #search { 
+      width: 100%; 
+      padding: 6px; 
+      border: 1px solid #ddd; 
+      border-radius: 4px; 
+      font-size: 12px; 
+    }
+    
+    select, button { 
+      width: 100%; 
+      padding: 6px; 
+      margin-bottom: 4px;
+      border: 1px solid #ddd; 
+      border-radius: 4px; 
+      font-size: 12px; 
+      cursor: pointer;
+    }
+    
+    button { background: #4a90d9; color: white; border: none; }
+    button:hover { background: #357abd; }
+    
+    #graph { width: 100vw; height: 100vh; }
+    
+    #details {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      max-height: 90vh;
+      overflow-y: auto;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: none;
+    }
+    
+    #details.visible { display: block; }
+    
+    #details h3 { font-size: 14px; margin-bottom: 10px; color: #333; word-break: break-word; }
+    #details h4 { font-size: 11px; margin: 10px 0 5px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    #details ul { 
+      list-style: none; 
+      font-size: 11px; 
+      margin-left: 0;
+    }
+    #details li { 
+      padding: 3px 0; 
+      border-bottom: 1px solid #eee; 
+      word-break: break-word;
+    }
+    #details li:last-child { border-bottom: none; }
+    
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .legend-item { display: flex; align-items: center; font-size: 10px; }
+    .legend-color { width: 12px; height: 12px; border-radius: 2px; margin-right: 4px; }
+    
+    #close-details { 
+      position: absolute; 
+      top: 10px; 
+      right: 10px; 
+      background: #999; 
+      color: white; 
+      border: none; 
+      width: auto; 
+      padding: 2px 8px;
+      margin: 0;
+    }
+    
+    .count-badge {
+      display: inline-block;
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      color: #666;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <h2>Klarity Analysis</h2>
+    
+    <div class="filter-section">
+      <label>Filter Edge Types</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" id="filter-inherits" checked> Inherits</label>
+        <label><input type="checkbox" id="filter-mixins" checked> Mixins</label>
+        <label><input type="checkbox" id="filter-messages" checked> Messages</label>
+        <label><input type="checkbox" id="filter-references" checked> References</label>
+        <label><input type="checkbox" id="filter-dynamic" checked> Dynamic</label>
+      </div>
+    </div>
+    
+    <div class="filter-section">
+      <label>Search Classes</label>
+      <input type="text" id="search" placeholder="Type to filter...">
+    </div>
+    
+    <div class="filter-section">
+      <label>Layout</label>
+      <select id="layout">
+        <option value="cose">Force-Directed</option>
+        <option value="breadthfirst">Hierarchical</option>
+        <option value="circle">Circular</option>
+        <option value="grid">Grid</option>
+      </select>
+    </div>
+    
+    <div class="filter-section">
+      <label>Actions</label>
+      <button id="export-png">Export PNG</button>
+      <button id="reset-view">Reset View</button>
+    </div>
+    
+    <div class="filter-section">
+      <label>Legend</label>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #3498db;"></div>Inherits</div>
+        <div class="legend-item"><div class="legend-color" style="background: #2ecc71;"></div>Mixins</div>
+        <div class="legend-item"><div class="legend-color" style="background: #f39c12;"></div>Messages</div>
+        <div class="legend-item"><div class="legend-color" style="background: #9b59b6;"></div>References</div>
+        <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div>Dynamic</div>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <label>Node Types</label>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-color" style="background: #e8f5e9; border: 2px solid #4caf50;"></div>Internal (Project Files)</div>
+        <div class="legend-item"><div class="legend-color" style="background: #f5f5f5; border: 2px solid #9e9e9e;"></div>External (References)</div>
+      </div>
+    </div>
+    
+    <div class="filter-section" style="margin-top: 15px; font-size: 10px; color: #999;">
+      <strong>Stats:</strong><br>
+      Classes: <span id="stat-classes">0</span><br>
+      Edges: <span id="stat-edges">0</span>
+    </div>
+  </div>
+  
+  <div id="details">
+    <button id="close-details">×</button>
+    <h3 id="details-name"></h3>
+    <div id="details-content"></div>
+  </div>
+  
+  <div id="graph"></div>
+  
+  <script>
+    const DATA = <%= @data_json %>;
+    
+    const edgeColors = {
+      inherits: '#3498db',
+      mixins: '#2ecc71',
+      messages: '#f39c12',
+      references: '#9b59b6',
+      dynamic: '#e74c3c'
+    };
+    
+    function transformData(data) {
+      const elements = { nodes: [], edges: [] };
+      const processedNodes = new Set();
+      const actualFiles = new Set(Object.keys(data));
+
+      Object.entries(data).forEach(([className, deps]) => {
+        if (!processedNodes.has(className)) {
+          elements.nodes.push({
+            data: { id: className, label: className.split('::').pop(), isInternal: true }
+          });
+          processedNodes.add(className);
+        }
+
+        ['inherits', 'mixins', 'messages', 'references', 'dynamic'].forEach(type => {
+          deps[type]?.forEach(target => {
+            if (!processedNodes.has(target)) {
+              elements.nodes.push({
+                data: { id: target, label: target.split('::').pop(), isInternal: actualFiles.has(target) }
+              });
+              processedNodes.add(target);
+            }
+
+            elements.edges.push({
+              data: {
+                source: className,
+                target: target,
+                type: type,
+                color: edgeColors[type]
+              }
+            });
+          });
+        });
+      });
+
+      return elements;
+    }
+    
+    const elements = transformData(DATA);
+    const cy = cytoscape({
+      container: document.getElementById('graph'),
+      elements: elements,
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'background-color': '#ecf0f1',
+            'label': 'data(label)',
+            'width': 'label',
+            'height': 'label',
+            'font-size': '11px',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'color': '#2c3e50',
+            'border-width': 2,
+            'border-color': '#bdc3c7',
+            'text-wrap': 'wrap',
+            'text-max-width': '80px',
+            'padding-left': '10px',
+            'padding-right': '10px',
+            'padding-top': '10px',
+            'padding-bottom': '10px'
+          }
+        },
+        {
+          selector: 'node[isInternal]',
+          style: {
+            'background-color': '#e8f5e9',
+            'border-color': '#4caf50'
+          }
+        },
+        {
+          selector: 'node[!isInternal]',
+          style: {
+            'background-color': '#f5f5f5',
+            'border-color': '#9e9e9e'
+          }
+        },
+        {
+          selector: 'node:selected',
+          style: {
+            'background-color': '#3498db',
+            'border-color': '#2980b9'
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 1.5,
+            'curve-style': 'bezier',
+            'line-color': 'data(color)',
+            'target-arrow-color': 'data(color)',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 0.7
+          }
+        },
+        {
+          selector: 'edge:selected',
+          style: {
+            'width': 3
+          }
+        }
+      ],
+      layout: {
+        name: 'cose',
+        animate: true,
+        animationDuration: 500,
+        nodeRepulsion: 6500,
+        idealEdgeLength: 100,
+        componentSpacing: 120,
+        nodeOverlap: 20
+      }
+    });
+    
+    document.getElementById('stat-classes').textContent = elements.nodes.length;
+    document.getElementById('stat-edges').textContent = elements.edges.length;
+    
+    const filters = {
+      inherits: true,
+      mixins: true,
+      messages: true,
+      references: true,
+      dynamic: true
+    };
+    
+    ['inherits', 'mixins', 'messages', 'references', 'dynamic'].forEach(type => {
+      document.getElementById(`filter-${type}`).addEventListener('change', (e) => {
+        filters[type] = e.target.checked;
+        applyFilters();
+      });
+    });
+    
+    function applyFilters() {
+      cy.edges().forEach(edge => {
+        const type = edge.data('type');
+        if (filters[type]) {
+          edge.show();
+          edge.style('opacity', 1);
+        } else {
+          edge.hide();
+        }
+      });
+
+      cy.nodes().forEach(node => {
+        const connectedEdges = cy.edges(`edge[source = "${node.id()}"], edge[target = "${node.id()}"]:visible`);
+        if (connectedEdges.length === 0) {
+          node.hide();
+        } else {
+          node.show();
+          node.style('opacity', 1);
+        }
+      });
+    }
+    
+    document.getElementById('search').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      if (!query) {
+        cy.nodes().forEach(node => node.show());
+        return;
+      }
+      
+      cy.nodes().forEach(node => {
+        const matches = node.id().toLowerCase().includes(query);
+        node.show(matches);
+        if (!matches) {
+          cy.elements(`edge[source = "${node.id()}"], edge[target = "${node.id()}"]`).hide();
+        }
+      });
+      
+      if (query) {
+        const visibleEdges = cy.edges(':visible');
+        visibleEdges.connectedNodes().show();
+      }
+    });
+    
+    document.getElementById('layout').addEventListener('change', (e) => {
+      const layoutConfig = getLayoutConfig(e.target.value);
+      cy.layout(layoutConfig).run();
+    });
+    
+    function getLayoutConfig(layoutName) {
+      const baseConfig = { animate: true, animationDuration: 500 };
+      
+      if (layoutName === 'cose') {
+        return {
+          ...baseConfig,
+          name: 'cose',
+          nodeRepulsion: 6500,
+          idealEdgeLength: 100,
+          componentSpacing: 120,
+          nodeOverlap: 20
+        };
+      }
+      
+      return baseConfig;
+    }
+    
+    document.getElementById('reset-view').addEventListener('click', () => {
+      cy.fit();
+    });
+    
+    document.getElementById('export-png').addEventListener('click', () => {
+      const png = cy.png({ full: true, scale: 2 });
+      const link = document.createElement('a');
+      link.href = png;
+      link.download = 'klarity-graph.png';
+      link.click();
+    });
+    
+    document.getElementById('close-details').addEventListener('click', () => {
+      document.getElementById('details').classList.remove('visible');
+    });
+    
+    cy.on('tap', 'node', (evt) => {
+      const node = evt.target;
+      const className = node.id();
+      const deps = DATA[className] || { inherits: [], mixins: [], messages: [], references: [], dynamic: [] };
+
+      const connectedNodes = node.neighborhood(':visible').nodes();
+      const connectedEdges = node.neighborhood(':visible').edges();
+
+      cy.nodes().animate({
+        style: { 'opacity': 0.25 }
+      }, { duration: 100 });
+
+      cy.edges().animate({
+        style: { 'opacity': 0.25 }
+      }, { duration: 100 });
+
+      connectedNodes.union(node).animate({
+        style: { 'opacity': 1 }
+      }, { duration: 100 });
+
+      connectedEdges.animate({
+        style: { 'opacity': 1 }
+      }, { duration: 100 });
+
+      document.getElementById('details-name').textContent = className;
+
+      let content = '';
+      const totalDeps = deps.inherits.length + deps.mixins.length + deps.messages.length + deps.references.length + deps.dynamic.length;
+
+      content += `<h4>Coupling Score <span class="count-badge">${totalDeps}</span></h4>`;
+
+      if (deps.inherits.length > 0) {
+        content += `<h4>Inherits <span class="count-badge">${deps.inherits.length}</span></h4><ul>${deps.inherits.map(d => `<li>${d}</li>`).join('')}</ul>`;
+      }
+
+      if (deps.mixins.length > 0) {
+        content += `<h4>Mixins <span class="count-badge">${deps.mixins.length}</span></h4><ul>${deps.mixins.map(d => `<li>${d}</li>`).join('')}</ul>`;
+      }
+
+      if (deps.messages.length > 0) {
+        content += `<h4>Messages <span class="count-badge">${deps.messages.length}</span></h4><ul>${deps.messages.map(d => `<li>${d}</li>`).join('')}</ul>`;
+      }
+
+      if (deps.references.length > 0) {
+        content += `<h4>References <span class="count-badge">${deps.references.length}</span></h4><ul>${deps.references.map(d => `<li>${d}</li>`).join('')}</ul>`;
+      }
+
+      if (deps.dynamic.length > 0) {
+        content += `<h4>Dynamic <span class="count-badge">${deps.dynamic.length}</span></h4><ul>${deps.dynamic.map(d => `<li>${d}</li>`).join('')}</ul>`;
+      }
+
+      document.getElementById('details-content').innerHTML = content;
+      document.getElementById('details').classList.add('visible');
+    });
+    
+    cy.on('tap', (evt) => {
+      if (evt.target === cy) {
+        document.getElementById('details').classList.remove('visible');
+        cy.nodes().animate({
+          style: { 'opacity': 1 }
+        }, { duration: 100 });
+        cy.edges().animate({
+          style: { 'opacity': 1 }
+        }, { duration: 100 });
+      }
+    });
+  </script>
+</body>
+</html>

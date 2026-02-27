@@ -35,6 +35,9 @@ klarity ./app
 # With JSON output
 klarity ./app --json
 
+# Generate interactive HTML visualization
+klarity ./app --html
+
 # Exclude specific patterns
 klarity ./app --exclude "*/concerns/*" --exclude "*/test/*"
 
@@ -72,6 +75,8 @@ result = Klarity.analyze('/path/to/project',
 
 ## Output Format
 
+### JSON
+
 ```ruby
 {
   "UserService" => {
@@ -83,6 +88,21 @@ result = Klarity.analyze('/path/to/project',
   }
 }
 ```
+
+### Interactive HTML
+
+Using the `--html` flag generates an interactive web visualization with:
+
+- **Force-directed graph** with pan and zoom
+- **Edge type filtering** - toggle visibility for inherits, mixins, messages, references, and dynamic dependencies
+- **Color-coded edges** for quick visual distinction of dependency types
+- **Search functionality** - filter nodes by class/module name
+- **Interactive details panel** - click any node to see all dependencies with counts
+- **Multiple layouts** - force-directed, hierarchical, circular, and grid
+- **Export capability** - save the graph as a PNG image
+- **Coupling metrics** - see total dependency count per class
+
+The HTML file is self-contained and can be shared or opened on any device with a web browser. No server required.
 
 ### Fields
 
