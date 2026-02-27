@@ -1,21 +1,9 @@
 require 'rspec'
 require 'klarity'
 require 'klarity/cli'
-require_relative 'spec_helper'
 
 RSpec.describe Klarity::CLI do
   let(:fixtures_path) { File.expand_path('fixtures/sample_app', __dir__) }
-
-  around do |example|
-    original_stdout = $stdout
-    original_stderr = $stderr
-    $stdout = StringIO.new
-    $stderr = StringIO.new
-    example.run
-  ensure
-    $stdout = original_stdout
-    $stderr = original_stderr
-  end
 
   describe '#run' do
     it 'analyzes directory and returns hash' do
@@ -24,6 +12,28 @@ RSpec.describe Klarity::CLI do
 
       expect(result).to be_a(Hash)
       expect(result.keys).to include('User', 'Order')
+    end
+
+    it 'returns USAGE for help flags' do
+      cli = described_class.new(['--help'])
+      result = cli.run
+
+      expect(result).to include('Usage:')
+      expect(result).to include('klarity <directory>')
+    end
+
+    it 'returns USAGE for -h flag' do
+      cli = described_class.new(['-h'])
+      result = cli.run
+
+      expect(result).to include('Usage:')
+    end
+
+    it 'returns USAGE when no arguments' do
+      cli = described_class.new([])
+      result = cli.run
+
+      expect(result).to include('Usage:')
     end
 
     it 'passes options to analyzer' do
@@ -38,13 +48,9 @@ RSpec.describe Klarity::CLI do
       )
     end
 
-    it 'returns nil for help flags' do
-      expect(described_class.new(['--help']).run).to be_nil
-      expect(described_class.new(['-h']).run).to be_nil
-    end
-
     it 'raises error for non-existent directory' do
       cli = described_class.new(['/nonexistent'])
+
       expect { cli.run }.to raise_error(Klarity::CLIError)
     end
   end

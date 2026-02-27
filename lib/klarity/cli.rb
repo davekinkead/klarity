@@ -25,15 +25,9 @@ module Klarity
     end
 
     def run
-      if @args.include?('--help') || @args.include?('-h')
-        puts USAGE
-        return nil
-      end
+      return USAGE if @args.include?('--help') || @args.include?('-h')
 
-      if @args.empty?
-        puts USAGE
-        return nil
-      end
+      return USAGE if @args.empty?
 
       directory = File.expand_path(@args.first)
 

@@ -8,7 +8,12 @@ require 'klarity'
 begin
   require 'klarity/cli'
   result = Klarity::CLI.new(ARGV).run
-  puts result.inspect if result
+
+  if result.is_a?(String)
+    puts result
+  elsif result
+    puts result.inspect
+  end
 rescue Klarity::CLIError => e
   warn "Error: #{e.message}"
   exit 1
