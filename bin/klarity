@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
+
+require 'klarity'
+
+begin
+  require 'klarity/cli'
+  Klarity::CLI.new(ARGV).run
+rescue Klarity::CLIError => e
+  warn "Error: #{e.message}"
+  exit 1
+rescue Interrupt
+  puts "\nInterrupted"
+  exit 130
+end
