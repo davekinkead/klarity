@@ -1,0 +1,1 @@
+/Users/davekinkead/.local/share/opencode/plans/klarity-gem-development.md
