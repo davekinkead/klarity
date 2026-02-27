@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module Klarity
   class CLIError < Error; end
 
@@ -7,21 +9,24 @@ module Klarity
     USAGE = <<~USAGE
       Usage: klarity <directory> [options]
 
-      Analyzes Ruby code in the given directory and outputs dependency graph.
+      Analyzes Ruby code in given directory and outputs dependency graph.
 
       Options:
         --exclude PATTERN   Glob pattern to exclude files
         --include PATTERN   Glob pattern to include files
+        --json              Output as JSON
         --help, -h          Show this help message
 
       Examples:
         klarity ./app
         klarity ~/projects/myapp/app --exclude "*/concerns/*"
+        klarity ./app --json
     USAGE
 
     def initialize(args)
       @args = args
       @options = {}
+      @json_output = false
     end
 
     def run
@@ -35,7 +40,9 @@ module Klarity
 
       parse_options!
 
-      Klarity.analyze(directory, **@options)
+      result = Klarity.analyze(directory, **@options)
+
+      @json_output ? JSON.generate(result) : result
     end
 
     private
@@ -53,6 +60,8 @@ module Klarity
         when '--include'
           @options[:include_patterns] ||= []
           @options[:include_patterns] << @args.shift
+        when '--json'
+          @json_output = true
         else
           raise CLIError, "Unknown option: #{option}"
         end

@@ -1,38 +1,141 @@
 # Klarity
 
-TODO: Delete this and the text below, and describe your gem
+A static dependency analyzer for Ruby code that identifies coupling between classes, modules, and services.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/klarity`. To experiment with that code, run `bin/console` for an interactive prompt.
+## Features
+
+- **Message Detection**: Tracks all method call receivers (constants, instance variables, local variables)
+- **Reference Tracking**: Captures all CamelCase constant references throughout code
+- **Inheritance Detection**: Identifies class inheritance chains
+- **Mixin Detection**: Detects `include`, `extend`, and `prepend` calls
+- **Dynamic Method Detection**: Identifies usage of `send`, `method_missing`, `define_method`, etc.
+- **Directory Scanning**: Recursively scans Ruby files with include/exclude patterns
+- **Multiple Output Formats**: Ruby Hash or JSON
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
 ```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+gem install klarity
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Or add to your Gemfile:
 
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem 'klarity'
 ```
 
 ## Usage
 
-TODO: Write usage instructions here
+### Command Line Interface
+
+```bash
+# Analyze a directory
+klarity ./app
+
+# With JSON output
+klarity ./app --json
+
+# Exclude specific patterns
+klarity ./app --exclude "*/concerns/*" --exclude "*/test/*"
+
+# Include only specific patterns
+klarity ./app --include "**/*service.rb"
+
+# Show help
+klarity --help
+```
+
+### Programmatic API
+
+```ruby
+require 'klarity'
+
+# Analyze a directory
+result = Klarity.analyze('/path/to/project')
+
+# Access dependency information
+result.each do |class_name, dependencies|
+  puts "#{class_name}:"
+  puts "  Inherits: #{dependencies[:inherits]}"
+  puts "  Mixins: #{dependencies[:mixins]}"
+  puts "  Messages: #{dependencies[:messages]}"
+  puts "  References: #{dependencies[:references]}"
+  puts "  Dynamic: #{dependencies[:dynamic]}"
+end
+
+# With options
+result = Klarity.analyze('/path/to/project',
+  exclude_patterns: ['*/concerns/*'],
+  include_patterns: ['**/*service.rb']
+)
+```
+
+## Output Format
+
+```ruby
+{
+  "UserService" => {
+    inherits: [],
+    mixins: [],
+    messages: ["UserRepository", "NotificationService", "@notifier"],
+    references: ["UserRepository", "NotificationService", "EmailValidator"],
+    dynamic: ["send"]
+  }
+}
+```
+
+### Fields
+
+- **`inherits`**: Array of parent classes this class inherits from
+- **`mixins`**: Array of modules included/extended/prepended
+- **`messages`**: Array of all message receivers (constants, instance variables, local variables)
+- **`references`**: Array of all CamelCase constant references in the class
+- **`dynamic`**: Array of dynamic method names used (`send`, `method_missing`, `define_method`, etc.)
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
+```bash
+# Install dependencies
+bundle install
 
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+# Run tests
+bundle exec rspec
+
+# Run linter
+bundle exec rubocop
+```
+
+## What Klarity Detects
+
+### Static Dependencies
+
+- Direct method calls: `User.save`, `Database.query`
+- Instance variable receivers: `@repository.find(id)`, `@cache.get(key)`
+- Local variable receivers: `service.call()`, `validator.validate(data)`
+- Constant references: `User`, `PaymentGateway::Client`
+- Array type checks: `[User, Admin].include?(object.class)`
+- Case statement types: `case object; when User, Admin; end`
+- Keyword argument defaults: `def initialize(repo: Repository.new)`
+
+### Dynamic Dependencies
+
+- `send`, `public_send`, `__send__`
+- `method_missing`, `respond_to_missing?`
+- `define_method`, `define_singleton_method`
+- `instance_variable_get`, `instance_variable_set`
+- `const_get`, `const_set`
+- `respond_to?`
+
+## Limitations
+
+- **Runtime DI**: Dependencies injected at call time without defaults are not detected
+- **DI Containers**: Framework-specific DI containers (e.g., `container.resolve(:repo)`) are not tracked
+- **Mock/Stub Substitutions**: Test doubles used in place of real dependencies
+- **Type Erasure**: Cannot determine type of instance/local variables without explicit usage
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/klarity.
+Bug reports and pull requests are welcome on GitHub at https://github.com/username/klarity.
 
 ## License
 

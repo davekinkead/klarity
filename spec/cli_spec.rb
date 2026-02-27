@@ -1,6 +1,7 @@
 require 'rspec'
 require 'klarity'
 require 'klarity/cli'
+require 'json'
 
 RSpec.describe Klarity::CLI do
   let(:fixtures_path) { File.expand_path('fixtures/sample_app', __dir__) }
@@ -14,12 +15,23 @@ RSpec.describe Klarity::CLI do
       expect(result.keys).to include('User', 'Order')
     end
 
+    it 'returns JSON when --json flag is present' do
+      cli = described_class.new([fixtures_path, '--json'])
+      result = cli.run
+
+      expect(result).to be_a(String)
+      parsed = JSON.parse(result)
+      expect(parsed).to be_a(Hash)
+      expect(parsed.keys).to include('User', 'Order')
+    end
+
     it 'returns USAGE for help flags' do
       cli = described_class.new(['--help'])
       result = cli.run
 
       expect(result).to include('Usage:')
       expect(result).to include('klarity <directory>')
+      expect(result).to include('--json')
     end
 
     it 'returns USAGE for -h flag' do
