@@ -4,6 +4,11 @@ require 'prism'
 
 module Klarity
   class Visitor < Prism::Visitor
+    DYNAMIC_METHODS = %i[send public_send __send__ method_missing define_method
+                         instance_variable_get instance_variable_set
+                         const_get const_set respond_to_missing?
+                         respond_to? method].freeze
+
     def initialize
       @results = {}
       @current_class = nil
@@ -12,6 +17,7 @@ module Klarity
       @inherits = []
       @mixins = Set.new
       @references = Set.new
+      @dynamic = Set.new
     end
 
     attr_reader :results
@@ -22,6 +28,7 @@ module Klarity
       previous_inherits = @inherits
       previous_mixins = @mixins
       previous_references = @references
+      previous_dynamic = @dynamic
 
       name = extract_name(node.constant_path)
       @current_class = build_qualified_name(name)
@@ -29,6 +36,7 @@ module Klarity
       @inherits = []
       @mixins = Set.new
       @references = Set.new
+      @dynamic = Set.new
 
       if node.superclass
         superclass_name = extract_name(node.superclass)
@@ -44,6 +52,7 @@ module Klarity
       @inherits = previous_inherits
       @mixins = previous_mixins
       @references = previous_references
+      @dynamic = previous_dynamic
     end
 
     def visit_module_node(node)
@@ -53,6 +62,7 @@ module Klarity
       previous_inherits = @inherits
       previous_mixins = @mixins
       previous_references = @references
+      previous_dynamic = @dynamic
 
       name = extract_name(node.constant_path)
       qualified_name = build_qualified_name(name)
@@ -62,6 +72,7 @@ module Klarity
       @inherits = []
       @mixins = Set.new
       @references = Set.new
+      @dynamic = Set.new
 
       super
 
@@ -73,6 +84,7 @@ module Klarity
       @inherits = previous_inherits
       @mixins = previous_mixins
       @references = previous_references
+      @dynamic = previous_dynamic
     end
 
     def visit_call_node(node)
@@ -82,6 +94,7 @@ module Klarity
       track_constants_in_arguments(node.arguments)
 
       track_mixin_calls(node)
+      track_dynamic_calls(node)
 
       receiver = extract_receiver(node)
       @messages.add(receiver) if receiver && !is_self_call?(receiver)
@@ -93,6 +106,7 @@ module Klarity
       return unless @current_class
 
       track_constants(node.parameters)
+      track_dynamic_method_definitions(node)
 
       super
     end
@@ -146,6 +160,18 @@ module Klarity
           @mixins << build_path(arg)
         end
       end
+    end
+
+    def track_dynamic_calls(node)
+      return unless DYNAMIC_METHODS.include?(node.name)
+
+      @dynamic << node.name.to_s
+    end
+
+    def track_dynamic_method_definitions(node)
+      return unless DYNAMIC_METHODS.include?(node.name)
+
+      @dynamic << node.name.to_s
     end
 
     def track_constants_in_parameters(parameters_node)
@@ -222,7 +248,7 @@ module Klarity
         inherits: @inherits,
         mixins: @mixins.to_a,
         references: @references.to_a,
-        dynamic: false
+        dynamic: @dynamic.to_a
       }
     end
   end

@@ -53,7 +53,7 @@ RSpec.describe Klarity do
 
       expect(result['Order'][:inherits]).to eq([])
       expect(result['Order'][:mixins]).to eq([])
-      expect(result['Order'][:dynamic]).to eq(false)
+      expect(result['Order'][:dynamic]).to eq([])
     end
 
     it 'captures dependencies from array include? checks in references' do
@@ -83,6 +83,18 @@ RSpec.describe Klarity do
       expect(result['UserService'][:messages]).to include('@notifier')
       expect(result['UserService'][:messages]).to include('validator')
       expect(result['UserService'][:messages]).to include('@user_repository')
+    end
+
+    it 'detects dynamic method calls' do
+      result = described_class.analyze(fixtures_path)
+
+      expect(result['DynamicHandler']).to be_a(Hash)
+      expect(result['DynamicHandler'][:dynamic]).to include('send')
+      expect(result['DynamicHandler'][:dynamic]).to include('public_send')
+      expect(result['DynamicHandler'][:dynamic]).to include('method_missing')
+      expect(result['DynamicHandler'][:dynamic]).to include('define_method')
+      expect(result['DynamicHandler'][:dynamic]).to include('instance_variable_get')
+      expect(result['DynamicHandler'][:dynamic]).to include('respond_to?')
     end
   end
 end
