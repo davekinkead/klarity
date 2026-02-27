@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 require 'prism'
+require_relative 'detectors/inheritance_detector'
+require_relative 'detectors/mixins_detector'
+require_relative 'detectors/messages_detector'
+require_relative 'detectors/references_detector'
+require_relative 'detectors/dynamic_detector'
 
 module Klarity
   class Visitor < Prism::Visitor
-    DYNAMIC_METHODS = %i[send public_send __send__ method_missing define_method
-                         instance_variable_get instance_variable_set
-                         const_get const_set respond_to_missing?
-                         respond_to? method].freeze
-
     def initialize
       @results = {}
       @current_class = nil
@@ -18,6 +18,12 @@ module Klarity
       @mixins = Set.new
       @references = Set.new
       @dynamic = Set.new
+
+      @inheritance_detector = InheritanceDetector.new
+      @mixins_detector = MixinsDetector.new
+      @messages_detector = MessagesDetector.new
+      @references_detector = ReferencesDetector.new
+      @dynamic_detector = DynamicDetector.new
     end
 
     attr_reader :results
@@ -38,10 +44,7 @@ module Klarity
       @references = Set.new
       @dynamic = Set.new
 
-      if node.superclass
-        superclass_name = extract_name(node.superclass)
-        @inherits << superclass_name if superclass_name
-      end
+      @inherits.concat(@inheritance_detector.detect(node))
 
       super
 
@@ -90,14 +93,13 @@ module Klarity
     def visit_call_node(node)
       return unless @current_class
 
-      track_constants(node.receiver)
-      track_constants_in_arguments(node.arguments)
+      @references.merge(@references_detector.detect(node))
 
-      track_mixin_calls(node)
-      track_dynamic_calls(node)
+      @mixins.merge(@mixins_detector.detect(node))
 
-      receiver = extract_receiver(node)
-      @messages.add(receiver) if receiver && !is_self_call?(receiver)
+      @messages.merge(@messages_detector.detect(node))
+
+      @dynamic.merge(@dynamic_detector.detect(node))
 
       super
     end
@@ -105,8 +107,9 @@ module Klarity
     def visit_def_node(node)
       return unless @current_class
 
-      track_constants(node.parameters)
-      track_dynamic_method_definitions(node)
+      @references.merge(@references_detector.detect(node.parameters)) if node.parameters
+
+      @dynamic.merge(@dynamic_detector.detect(node))
 
       super
     end
@@ -114,75 +117,12 @@ module Klarity
     def visit_when_node(node)
       return unless @current_class
 
-      node.conditions.each { |cond| track_constants(cond) }
+      node.conditions.each { |cond| @references.merge(@references_detector.detect(cond)) }
 
       super
     end
 
     private
-
-    def track_constants(node)
-      return unless node
-
-      case node
-      when Prism::ConstantReadNode
-        @references << node.name.to_s
-      when Prism::ConstantPathNode
-        @references << build_path(node)
-      when Prism::ArrayNode
-        node.elements.each { |el| track_constants(el) }
-      when Prism::ArgumentsNode
-        node.arguments&.each { |arg| track_constants(arg) }
-      when Prism::CallNode
-        track_constants(node.receiver)
-        node.arguments&.arguments&.each { |arg| track_constants(arg) }
-      end
-    end
-
-    def track_constants_in_arguments(arguments_node)
-      return unless arguments_node
-
-      if arguments_node.respond_to?(:arguments)
-        arguments_node.arguments.each { |arg| track_constants(arg) }
-      elsif arguments_node.respond_to?(:requireds)
-        track_constants_in_parameters(arguments_node)
-      end
-    end
-
-    def track_mixin_calls(node)
-      return unless %i[include extend prepend].include?(node.name)
-
-      node.arguments&.arguments&.each do |arg|
-        case arg
-        when Prism::ConstantReadNode
-          @mixins << arg.name.to_s
-        when Prism::ConstantPathNode
-          @mixins << build_path(arg)
-        end
-      end
-    end
-
-    def track_dynamic_calls(node)
-      return unless DYNAMIC_METHODS.include?(node.name)
-
-      @dynamic << node.name.to_s
-    end
-
-    def track_dynamic_method_definitions(node)
-      return unless DYNAMIC_METHODS.include?(node.name)
-
-      @dynamic << node.name.to_s
-    end
-
-    def track_constants_in_parameters(parameters_node)
-      parameters_node.requireds&.each { |p| track_constants(p) }
-      parameters_node.optionals&.each { |p| track_constants(p) }
-      parameters_node.rest && track_constants(parameters_node.rest)
-      parameters_node.posts&.each { |p| track_constants(p) }
-      parameters_node.keywords&.each { |p| track_constants(p) }
-      parameters_node.keyword_rest && track_constants(parameters_node.keyword_rest)
-      parameters_node.block && track_constants(parameters_node.block)
-    end
 
     def extract_name(node)
       case node
@@ -216,28 +156,6 @@ module Klarity
       end
 
       parts.join('::')
-    end
-
-    def extract_receiver(node)
-      receiver = node.receiver
-
-      return nil unless receiver
-
-      case receiver
-      when Prism::SelfNode
-        nil
-      when Prism::ConstantReadNode
-        receiver.name.to_s
-      when Prism::ConstantPathNode
-        build_path(receiver)
-      when Prism::LocalVariableReadNode, Prism::InstanceVariableReadNode,
-           Prism::ClassVariableReadNode, Prism::GlobalVariableReadNode
-        receiver.name.to_s
-      end
-    end
-
-    def is_self_call?(_receiver)
-      false
     end
 
     def save_current_results
