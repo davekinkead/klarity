@@ -6,6 +6,7 @@ require_relative 'detectors/mixins_detector'
 require_relative 'detectors/messages_detector'
 require_relative 'detectors/references_detector'
 require_relative 'detectors/dynamic_detector'
+require_relative 'detectors/active_record_detector'
 
 module Klarity
   class Visitor < Prism::Visitor
@@ -18,12 +19,14 @@ module Klarity
       @mixins = Set.new
       @references = Set.new
       @dynamic = Set.new
+      @associations = Set.new
 
       @inheritance_detector = InheritanceDetector.new
       @mixins_detector = MixinsDetector.new
       @messages_detector = MessagesDetector.new
       @references_detector = ReferencesDetector.new
       @dynamic_detector = DynamicDetector.new
+      @active_record_detector = ActiveRecordDetector.new
     end
 
     attr_reader :results
@@ -35,6 +38,7 @@ module Klarity
       previous_mixins = @mixins
       previous_references = @references
       previous_dynamic = @dynamic
+      previous_associations = @associations
 
       name = extract_name(node.constant_path)
       @current_class = build_qualified_name(name)
@@ -43,6 +47,7 @@ module Klarity
       @mixins = Set.new
       @references = Set.new
       @dynamic = Set.new
+      @associations = Set.new
 
       @inherits.concat(@inheritance_detector.detect(node))
 
@@ -56,6 +61,7 @@ module Klarity
       @mixins = previous_mixins
       @references = previous_references
       @dynamic = previous_dynamic
+      @associations = previous_associations
     end
 
     def visit_module_node(node)
@@ -66,6 +72,7 @@ module Klarity
       previous_mixins = @mixins
       previous_references = @references
       previous_dynamic = @dynamic
+      previous_associations = @associations
 
       name = extract_name(node.constant_path)
       qualified_name = build_qualified_name(name)
@@ -76,6 +83,7 @@ module Klarity
       @mixins = Set.new
       @references = Set.new
       @dynamic = Set.new
+      @associations = Set.new
 
       super
 
@@ -88,6 +96,7 @@ module Klarity
       @mixins = previous_mixins
       @references = previous_references
       @dynamic = previous_dynamic
+      @associations = previous_associations
     end
 
     def visit_call_node(node)
@@ -100,6 +109,8 @@ module Klarity
       @messages.merge(@messages_detector.detect(node))
 
       @dynamic.merge(@dynamic_detector.detect(node))
+
+      @associations.merge(@active_record_detector.detect(node))
 
       super
     end
@@ -166,7 +177,8 @@ module Klarity
         inherits: @inherits,
         mixins: @mixins.to_a,
         references: @references.to_a,
-        dynamic: @dynamic.to_a
+        dynamic: @dynamic.to_a,
+        associations: @associations.to_a
       }
     end
   end

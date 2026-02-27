@@ -8,9 +8,10 @@ A static dependency analyzer for Ruby code that identifies coupling between clas
 - **Reference Tracking**: Captures all CamelCase constant references throughout code
 - **Inheritance Detection**: Identifies class inheritance chains
 - **Mixin Detection**: Detects `include`, `extend`, and `prepend` calls
+- **ActiveRecord Associations**: Detects Rails associations (`belongs_to`, `has_many`, `has_one`, `has_and_belongs_to_many`) and infers class names
 - **Dynamic Method Detection**: Identifies usage of `send`, `method_missing`, `define_method`, etc.
 - **Directory Scanning**: Recursively scans Ruby files with include/exclude patterns
-- **Multiple Output Formats**: Ruby Hash or JSON
+- **Multiple Output Formats**: Ruby Hash or JSON, or interactive HTML visualization
 
 ## Installation
 
@@ -64,6 +65,7 @@ result.each do |class_name, dependencies|
   puts "  Messages: #{dependencies[:messages]}"
   puts "  References: #{dependencies[:references]}"
   puts "  Dynamic: #{dependencies[:dynamic]}"
+  puts "  Associations: #{dependencies[:associations]}"
 end
 
 # With options
@@ -84,7 +86,8 @@ result = Klarity.analyze('/path/to/project',
     mixins: [],
     messages: ["UserRepository", "NotificationService", "@notifier"],
     references: ["UserRepository", "NotificationService", "EmailValidator"],
-    dynamic: ["send"]
+    dynamic: ["send"],
+    associations: []
   }
 }
 ```
@@ -94,7 +97,7 @@ result = Klarity.analyze('/path/to/project',
 Using the `--html` flag generates an interactive web visualization with:
 
 - **Force-directed graph** with pan and zoom
-- **Edge type filtering** - toggle visibility for inherits, mixins, messages, references, and dynamic dependencies
+- **Edge type filtering** - toggle visibility for inherits, mixins, messages, references, associations, and dynamic dependencies
 - **Color-coded edges** for quick visual distinction of dependency types
 - **Search functionality** - filter nodes by class/module name
 - **Interactive details panel** - click any node to see all dependencies with counts
@@ -111,6 +114,7 @@ The HTML file is self-contained and can be shared or opened on any device with a
 - **`messages`**: Array of all message receivers (constants, instance variables, local variables)
 - **`references`**: Array of all CamelCase constant references in the class
 - **`dynamic`**: Array of dynamic method names used (`send`, `method_missing`, `define_method`, etc.)
+- **`associations`**: Array of ActiveRecord associations with inferred class names (e.g., `has_many :orders` → `Order`)
 
 ## Development
 
@@ -136,6 +140,15 @@ bundle exec rubocop
 - Array type checks: `[User, Admin].include?(object.class)`
 - Case statement types: `case object; when User, Admin; end`
 - Keyword argument defaults: `def initialize(repo: Repository.new)`
+
+### ActiveRecord Associations
+
+- `belongs_to`: Ownership associations (e.g., `belongs_to :user`)
+- `has_many`: One-to-many associations with class name inference (e.g., `has_many :orders` → `Order`)
+- `has_one`: One-to-one associations (e.g., `has_one :profile`)
+- `has_and_belongs_to_many`: Many-to-many associations with class name inference (e.g., `has_and_belongs_to_many :tags` → `Tag`)
+- Custom class names: Supports `class_name:` option (e.g., `belongs_to :author, class_name: 'Person'`)
+- Namespaced associations: Handles qualified class names (e.g., `Taxonomy::Category`)
 
 ### Dynamic Dependencies
 

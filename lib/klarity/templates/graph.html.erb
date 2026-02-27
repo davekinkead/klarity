@@ -131,6 +131,7 @@
         <label><input type="checkbox" id="filter-messages" checked> Messages</label>
         <label><input type="checkbox" id="filter-references" checked> References</label>
         <label><input type="checkbox" id="filter-dynamic" checked> Dynamic</label>
+        <label><input type="checkbox" id="filter-associations" checked> Associations</label>
       </div>
     </div>
     
@@ -163,6 +164,7 @@
         <div class="legend-item"><div class="legend-color" style="background: #f39c12;"></div>Messages</div>
         <div class="legend-item"><div class="legend-color" style="background: #9b59b6;"></div>References</div>
         <div class="legend-item"><div class="legend-color" style="background: #e74c3c;"></div>Dynamic</div>
+        <div class="legend-item"><div class="legend-color" style="background: #1abc9c;"></div>Associations</div>
       </div>
     </div>
 
@@ -197,7 +199,8 @@
       mixins: '#2ecc71',
       messages: '#f39c12',
       references: '#9b59b6',
-      dynamic: '#e74c3c'
+      dynamic: '#e74c3c',
+      associations: '#1abc9c'
     };
     
     function transformData(data) {
@@ -212,7 +215,8 @@
                          (deps.mixins?.length || 0) +
                          (deps.messages?.length || 0) +
                          (deps.references?.length || 0) +
-                         (deps.dynamic?.length || 0);
+                         (deps.dynamic?.length || 0) +
+                         (deps.associations?.length || 0);
         nodeDegrees[className] = totalDeps;
         maxDegree = Math.max(maxDegree, totalDeps);
       });
@@ -233,7 +237,7 @@
         processedNodes.add(className);
         }
 
-        ['inherits', 'mixins', 'messages', 'references', 'dynamic'].forEach(type => {
+        ['inherits', 'mixins', 'messages', 'references', 'dynamic', 'associations'].forEach(type => {
           deps[type]?.forEach(target => {
             if (!processedNodes.has(target)) {
               const degree = nodeDegrees[target] || 0;
@@ -350,10 +354,11 @@
       mixins: true,
       messages: true,
       references: true,
-      dynamic: true
+      dynamic: true,
+      associations: true
     };
-    
-    ['inherits', 'mixins', 'messages', 'references', 'dynamic'].forEach(type => {
+
+    ['inherits', 'mixins', 'messages', 'references', 'dynamic', 'associations'].forEach(type => {
       document.getElementById(`filter-${type}`).addEventListener('change', (e) => {
         filters[type] = e.target.checked;
         applyFilters();
@@ -364,19 +369,17 @@
       cy.edges().forEach(edge => {
         const type = edge.data('type');
         if (filters[type]) {
-          edge.show();
           edge.style('opacity', 1);
         } else {
-          edge.hide();
+          edge.style('opacity', 0);
         }
       });
 
       cy.nodes().forEach(node => {
-        const connectedEdges = cy.edges(`edge[source = "${node.id()}"], edge[target = "${node.id()}"]:visible`);
-        if (connectedEdges.length === 0) {
-          node.hide();
+        const visibleEdges = node.connectedEdges().filter(edge => edge.style('opacity') !== '0');
+        if (visibleEdges.length === 0) {
+          node.style('opacity', 0);
         } else {
-          node.show();
           node.style('opacity', 1);
         }
       });
@@ -446,7 +449,7 @@
     cy.on('tap', 'node', (evt) => {
       const node = evt.target;
       const className = node.id();
-      const deps = DATA[className] || { inherits: [], mixins: [], messages: [], references: [], dynamic: [] };
+      const deps = DATA[className] || { inherits: [], mixins: [], messages: [], references: [], dynamic: [], associations: [] };
 
       const connectedNodes = node.neighborhood(':visible').nodes();
       const connectedEdges = node.neighborhood(':visible').edges();
@@ -470,7 +473,7 @@
       document.getElementById('details-name').textContent = className;
 
       let content = '';
-      const totalDeps = deps.inherits.length + deps.mixins.length + deps.messages.length + deps.references.length + deps.dynamic.length;
+      const totalDeps = deps.inherits.length + deps.mixins.length + deps.messages.length + deps.references.length + deps.dynamic.length + deps.associations.length;
 
       content += `<h4>Coupling Score <span class="count-badge">${totalDeps}</span></h4>`;
 
@@ -492,6 +495,10 @@
 
       if (deps.dynamic.length > 0) {
         content += `<h4>Dynamic <span class="count-badge">${deps.dynamic.length}</span></h4><ul>${deps.dynamic.map(d => `<li>${d}</li>`).join('')}</ul>`;
+      }
+
+      if (deps.associations.length > 0) {
+        content += `<h4>Associations <span class="count-badge">${deps.associations.length}</span></h4><ul>${deps.associations.map(d => `<li>${d}</li>`).join('')}</ul>`;
       }
 
       document.getElementById('details-content').innerHTML = content;

@@ -6,7 +6,9 @@ module Klarity
       inherits: [],
       mixins: [],
       messages: [],
-      dynamic: false
+      references: [],
+      dynamic: [],
+      associations: []
     }.freeze
 
     def initialize
@@ -17,7 +19,7 @@ module Klarity
       @graph[name] ||= DEFAULT_DEPENDENCIES.dup
 
       dependencies.each do |key, value|
-        if %i[inherits includes messages].include?(key)
+        if %i[inherits mixins messages references dynamic associations].include?(key)
           @graph[name][key] |= Array(value)
         else
           @graph[name][key] = value
