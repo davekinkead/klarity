@@ -9,6 +9,8 @@ module Klarity
       @current_class = nil
       @current_namespace = []
       @messages = Set.new
+      @inherits = []
+      @mixins = Set.new
     end
 
     attr_reader :results
@@ -16,10 +18,19 @@ module Klarity
     def visit_class_node(node)
       previous_class = @current_class
       previous_messages = @messages
+      previous_inherits = @inherits
+      previous_mixins = @mixins
 
       name = extract_name(node.constant_path)
       @current_class = build_qualified_name(name)
       @messages = Set.new
+      @inherits = []
+      @mixins = Set.new
+
+      if node.superclass
+        superclass_name = extract_name(node.superclass)
+        @inherits << superclass_name if superclass_name
+      end
 
       super
 
@@ -27,18 +38,24 @@ module Klarity
 
       @current_class = previous_class
       @messages = previous_messages
+      @inherits = previous_inherits
+      @mixins = previous_mixins
     end
 
     def visit_module_node(node)
       previous_namespace = @current_namespace.dup
       previous_class = @current_class
       previous_messages = @messages
+      previous_inherits = @inherits
+      previous_mixins = @mixins
 
       name = extract_name(node.constant_path)
       qualified_name = build_qualified_name(name)
       @current_namespace << name
       @current_class = qualified_name
       @messages = Set.new
+      @inherits = []
+      @mixins = Set.new
 
       super
 
@@ -47,10 +64,14 @@ module Klarity
       @current_namespace = previous_namespace
       @current_class = previous_class
       @messages = previous_messages
+      @inherits = previous_inherits
+      @mixins = previous_mixins
     end
 
     def visit_call_node(node)
       return unless @current_class
+
+      check_mixin_calls(node)
 
       receiver = extract_receiver(node)
       @messages.add(receiver) if receiver && !is_self_call?(receiver)
@@ -113,13 +134,26 @@ module Klarity
       false
     end
 
+    def check_mixin_calls(node)
+      return unless %i[include extend prepend].include?(node.name)
+
+      node.arguments&.arguments&.each do |arg|
+        case arg
+        when Prism::ConstantReadNode
+          @mixins << arg.name.to_s
+        when Prism::ConstantPathNode
+          @mixins << build_path(arg)
+        end
+      end
+    end
+
     def save_current_results
       return unless @current_class
 
       @results[@current_class] = {
         messages: @messages.to_a,
-        inherits: [],
-        includes: [],
+        inherits: @inherits,
+        mixins: @mixins.to_a,
         dynamic: false
       }
     end

@@ -25,31 +25,34 @@ module Klarity
     end
 
     def run
-      parse_options!
+      if @args.include?('--help') || @args.include?('-h')
+        puts USAGE
+        return nil
+      end
 
       if @args.empty?
-        show_help
-        exit 1
+        puts USAGE
+        return nil
       end
 
       directory = File.expand_path(@args.first)
 
       raise CLIError, "Directory not found: #{directory}" unless File.directory?(directory)
 
-      result = Klarity.analyze(directory, **@options)
-      print_result(result)
+      parse_options!
+
+      Klarity.analyze(directory, **@options)
     end
 
     private
 
     def parse_options!
+      @args.shift
+
       while @args.first&.start_with?('-')
         option = @args.shift
 
         case option
-        when '--help', '-h'
-          show_help
-          exit 0
         when '--exclude'
           @options[:exclude_patterns] ||= []
           @options[:exclude_patterns] << @args.shift
@@ -60,14 +63,6 @@ module Klarity
           raise CLIError, "Unknown option: #{option}"
         end
       end
-    end
-
-    def show_help
-      puts USAGE
-    end
-
-    def print_result(result)
-      puts result.inspect
     end
   end
 end

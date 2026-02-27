@@ -48,12 +48,12 @@ RSpec.describe Klarity do
       expect(result['Order'][:messages]).not_to include('Order')
     end
 
-    it 'includes all empty arrays for other keys' do
+    it 'includes all empty arrays for other keys when no inheritance/mixins' do
       result = described_class.analyze(fixtures_path)
 
-      expect(result['User'][:inherits]).to eq([])
-      expect(result['User'][:includes]).to eq([])
-      expect(result['User'][:dynamic]).to eq(false)
+      expect(result['Order'][:inherits]).to eq([])
+      expect(result['Order'][:mixins]).to eq([])
+      expect(result['Order'][:dynamic]).to eq(false)
     end
   end
 end

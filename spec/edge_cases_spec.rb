@@ -1,8 +1,17 @@
 require 'rspec'
 require 'klarity'
+require 'stringio'
 
 RSpec.describe 'Edge cases' do
   let(:fixtures_path) { File.expand_path('fixtures/sample_app', __dir__) }
+
+  around do |example|
+    original_stderr = $stderr
+    $stderr = StringIO.new
+    example.run
+  ensure
+    $stderr = original_stderr
+  end
 
   describe 'empty class' do
     it 'includes classes with no method calls' do

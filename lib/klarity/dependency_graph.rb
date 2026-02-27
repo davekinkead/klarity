@@ -4,7 +4,7 @@ module Klarity
   class DependencyGraph
     DEFAULT_DEPENDENCIES = {
       inherits: [],
-      includes: [],
+      mixins: [],
       messages: [],
       dynamic: false
     }.freeze

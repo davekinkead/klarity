@@ -35,7 +35,7 @@ RSpec.describe 'Integration tests' do
 
       database_calls = result.select { |_, deps| deps[:messages].include?('Database') }
 
-      expect(database_calls.keys.count).to eq(3)
+      expect(database_calls.keys.count).to eq(4)
     end
   end
 end

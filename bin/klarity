@@ -7,7 +7,8 @@ require 'klarity'
 
 begin
   require 'klarity/cli'
-  Klarity::CLI.new(ARGV).run
+  result = Klarity::CLI.new(ARGV).run
+  puts result.inspect if result
 rescue Klarity::CLIError => e
   warn "Error: #{e.message}"
   exit 1
