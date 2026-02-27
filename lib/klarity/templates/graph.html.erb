@@ -225,7 +225,7 @@
         elements.nodes.push({
           data: {
             id: className,
-            label: className.split('::').pop(),
+            label: className,
             isInternal: true,
             degree: degree
           }
@@ -244,7 +244,7 @@
               elements.nodes.push({
                 data: {
                   id: target,
-                  label: target.split('::').pop(),
+                  label: target,
                   isInternal: actualFiles.has(target),
                   degree: degree
                 }
@@ -332,10 +332,10 @@
         name: 'cose',
         animate: true,
         animationDuration: 500,
-        nodeRepulsion: 25000,
+        nodeRepulsion: 75000,
         idealEdgeLength: 150,
         componentSpacing: 300,
-        nodeOverlap: 20,
+        nodeOverlap: 60,
         gravity: 0.01,
         numIter: 2500,
         padding: 50
@@ -414,10 +414,10 @@
       if (layoutName === 'cose') {
         return {
           ...baseConfig,
-          nodeRepulsion: 25000,
+          nodeRepulsion: 75000,
           idealEdgeLength: 150,
           componentSpacing: 300,
-          nodeOverlap: 20,
+          nodeOverlap: 60,
           gravity: 0.01,
           numIter: 2500,
           padding: 50
