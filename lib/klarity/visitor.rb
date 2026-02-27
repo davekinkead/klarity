@@ -73,8 +73,18 @@ module Klarity
 
       check_mixin_calls(node)
 
+      check_array_include(node)
+
       receiver = extract_receiver(node)
       @messages.add(receiver) if receiver && !is_self_call?(receiver)
+
+      super
+    end
+
+    def visit_def_node(node)
+      return unless @current_class
+
+      check_keyword_defaults(node.parameters)
 
       super
     end
@@ -144,6 +154,41 @@ module Klarity
         when Prism::ConstantPathNode
           @mixins << build_path(arg)
         end
+      end
+    end
+
+    def check_array_include(node)
+      return unless node.name == :include?
+      return unless node.receiver.is_a?(Prism::ArrayNode)
+
+      node.receiver.elements.each do |element|
+        case element
+        when Prism::ConstantReadNode
+          @messages << element.name.to_s
+        when Prism::ConstantPathNode
+          @messages << build_path(element)
+        end
+      end
+    end
+
+    def check_keyword_defaults(parameters)
+      return unless parameters&.keywords
+
+      parameters.keywords.each do |keyword_param|
+        next unless keyword_param.is_a?(Prism::OptionalKeywordParameterNode)
+
+        value = keyword_param.value
+        next unless value
+
+        extract_dependency_from_node(value)
+      end
+    end
+
+    def extract_dependency_from_node(node)
+      case node
+      when Prism::CallNode
+        receiver = extract_receiver(node)
+        @messages << receiver if receiver && node.name == :new
       end
     end
 

@@ -55,5 +55,25 @@ RSpec.describe Klarity do
       expect(result['Order'][:mixins]).to eq([])
       expect(result['Order'][:dynamic]).to eq(false)
     end
+
+    it 'captures dependencies from array include? checks' do
+      result = described_class.analyze(fixtures_path)
+
+      expect(result['ArrayIncludeCheck']).to be_a(Hash)
+      expect(result['ArrayIncludeCheck'][:messages]).to include('User')
+      expect(result['ArrayIncludeCheck'][:messages]).to include('Order')
+      expect(result['ArrayIncludeCheck'][:messages]).to include('PaymentService')
+      expect(result['ArrayIncludeCheck'][:messages]).to include('PaymentGateway')
+      expect(result['ArrayIncludeCheck'][:messages]).to include('AuditService')
+    end
+
+    it 'captures dependencies from default values in keyword arguments' do
+      result = described_class.analyze(fixtures_path)
+
+      expect(result['UserService']).to be_a(Hash)
+      expect(result['UserService'][:messages]).to include('UserRepository')
+      expect(result['UserService'][:messages]).to include('NotificationService')
+      expect(result['UserService'][:messages]).to include('EmailValidator')
+    end
   end
 end
