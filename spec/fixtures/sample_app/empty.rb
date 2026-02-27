@@ -1,0 +1,2 @@
+class EmptyFile
+end
