@@ -204,20 +204,50 @@
       const elements = { nodes: [], edges: [] };
       const processedNodes = new Set();
       const actualFiles = new Set(Object.keys(data));
+      const nodeDegrees = {};
+
+      let maxDegree = 0;
+      Object.entries(data).forEach(([className, deps]) => {
+        const totalDeps = (deps.inherits?.length || 0) +
+                         (deps.mixins?.length || 0) +
+                         (deps.messages?.length || 0) +
+                         (deps.references?.length || 0) +
+                         (deps.dynamic?.length || 0);
+        nodeDegrees[className] = totalDeps;
+        maxDegree = Math.max(maxDegree, totalDeps);
+      });
 
       Object.entries(data).forEach(([className, deps]) => {
         if (!processedNodes.has(className)) {
-          elements.nodes.push({
-            data: { id: className, label: className.split('::').pop(), isInternal: true }
-          });
-          processedNodes.add(className);
+        const degree = nodeDegrees[className] || 0;
+        const nodeSize = 30 + (degree * 5);
+
+        elements.nodes.push({
+          data: {
+            id: className,
+            label: className.split('::').pop(),
+            isInternal: true,
+            degree: degree
+          }
+        });
+        processedNodes.add(className);
         }
 
         ['inherits', 'mixins', 'messages', 'references', 'dynamic'].forEach(type => {
           deps[type]?.forEach(target => {
             if (!processedNodes.has(target)) {
+              const degree = nodeDegrees[target] || 0;
+              const baseSize = 30;
+              const sizeMultiplier = Math.min(degree * 3, 50);
+              const nodeSize = baseSize + sizeMultiplier;
+
               elements.nodes.push({
-                data: { id: target, label: target.split('::').pop(), isInternal: actualFiles.has(target) }
+                data: {
+                  id: target,
+                  label: target.split('::').pop(),
+                  isInternal: actualFiles.has(target),
+                  degree: degree
+                }
               });
               processedNodes.add(target);
             }
@@ -247,8 +277,8 @@
           style: {
             'background-color': '#ecf0f1',
             'label': 'data(label)',
-            'width': 'label',
-            'height': 'label',
+            'width': 'mapData(degree, 0, 200, 30, 150)',
+            'height': 'mapData(degree, 0, 200, 30, 150)',
             'font-size': '11px',
             'text-valign': 'center',
             'text-halign': 'center',
@@ -256,11 +286,7 @@
             'border-width': 2,
             'border-color': '#bdc3c7',
             'text-wrap': 'wrap',
-            'text-max-width': '80px',
-            'padding-left': '10px',
-            'padding-right': '10px',
-            'padding-top': '10px',
-            'padding-bottom': '10px'
+            'text-max-width': '80px'
           }
         },
         {
@@ -306,10 +332,13 @@
         name: 'cose',
         animate: true,
         animationDuration: 500,
-        nodeRepulsion: 6500,
-        idealEdgeLength: 100,
-        componentSpacing: 120,
-        nodeOverlap: 20
+        nodeRepulsion: 25000,
+        idealEdgeLength: 150,
+        componentSpacing: 300,
+        nodeOverlap: 20,
+        gravity: 0.01,
+        numIter: 2500,
+        padding: 50
       }
     });
     
@@ -380,16 +409,18 @@
     });
     
     function getLayoutConfig(layoutName) {
-      const baseConfig = { animate: true, animationDuration: 500 };
+      const baseConfig = { animate: true, animationDuration: 500, name: layoutName };
       
       if (layoutName === 'cose') {
         return {
           ...baseConfig,
-          name: 'cose',
-          nodeRepulsion: 6500,
-          idealEdgeLength: 100,
-          componentSpacing: 120,
-          nodeOverlap: 20
+          nodeRepulsion: 25000,
+          idealEdgeLength: 150,
+          componentSpacing: 300,
+          nodeOverlap: 20,
+          gravity: 0.01,
+          numIter: 2500,
+          padding: 50
         };
       }
       
