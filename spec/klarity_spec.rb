@@ -56,24 +56,33 @@ RSpec.describe Klarity do
       expect(result['Order'][:dynamic]).to eq(false)
     end
 
-    it 'captures dependencies from array include? checks' do
+    it 'captures dependencies from array include? checks in references' do
       result = described_class.analyze(fixtures_path)
 
       expect(result['ArrayIncludeCheck']).to be_a(Hash)
-      expect(result['ArrayIncludeCheck'][:messages]).to include('User')
-      expect(result['ArrayIncludeCheck'][:messages]).to include('Order')
-      expect(result['ArrayIncludeCheck'][:messages]).to include('PaymentService')
-      expect(result['ArrayIncludeCheck'][:messages]).to include('PaymentGateway')
-      expect(result['ArrayIncludeCheck'][:messages]).to include('AuditService')
+      expect(result['ArrayIncludeCheck'][:references]).to include('User')
+      expect(result['ArrayIncludeCheck'][:references]).to include('Order')
+      expect(result['ArrayIncludeCheck'][:references]).to include('PaymentService')
+      expect(result['ArrayIncludeCheck'][:references]).to include('PaymentGateway')
+      expect(result['ArrayIncludeCheck'][:references]).to include('AuditService')
     end
 
-    it 'captures dependencies from default values in keyword arguments' do
+    it 'captures dependencies from default values in keyword arguments in references' do
       result = described_class.analyze(fixtures_path)
 
       expect(result['UserService']).to be_a(Hash)
-      expect(result['UserService'][:messages]).to include('UserRepository')
-      expect(result['UserService'][:messages]).to include('NotificationService')
-      expect(result['UserService'][:messages]).to include('EmailValidator')
+      expect(result['UserService'][:references]).to include('UserRepository')
+      expect(result['UserService'][:references]).to include('NotificationService')
+      expect(result['UserService'][:references]).to include('EmailValidator')
+    end
+
+    it 'tracks all message receivers including variables' do
+      result = described_class.analyze(fixtures_path)
+
+      expect(result['UserService'][:messages]).to include('@user_repository')
+      expect(result['UserService'][:messages]).to include('@notifier')
+      expect(result['UserService'][:messages]).to include('validator')
+      expect(result['UserService'][:messages]).to include('@user_repository')
     end
   end
 end

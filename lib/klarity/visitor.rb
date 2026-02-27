@@ -11,6 +11,7 @@ module Klarity
       @messages = Set.new
       @inherits = []
       @mixins = Set.new
+      @references = Set.new
     end
 
     attr_reader :results
@@ -20,12 +21,14 @@ module Klarity
       previous_messages = @messages
       previous_inherits = @inherits
       previous_mixins = @mixins
+      previous_references = @references
 
       name = extract_name(node.constant_path)
       @current_class = build_qualified_name(name)
       @messages = Set.new
       @inherits = []
       @mixins = Set.new
+      @references = Set.new
 
       if node.superclass
         superclass_name = extract_name(node.superclass)
@@ -40,6 +43,7 @@ module Klarity
       @messages = previous_messages
       @inherits = previous_inherits
       @mixins = previous_mixins
+      @references = previous_references
     end
 
     def visit_module_node(node)
@@ -48,6 +52,7 @@ module Klarity
       previous_messages = @messages
       previous_inherits = @inherits
       previous_mixins = @mixins
+      previous_references = @references
 
       name = extract_name(node.constant_path)
       qualified_name = build_qualified_name(name)
@@ -56,6 +61,7 @@ module Klarity
       @messages = Set.new
       @inherits = []
       @mixins = Set.new
+      @references = Set.new
 
       super
 
@@ -66,14 +72,16 @@ module Klarity
       @messages = previous_messages
       @inherits = previous_inherits
       @mixins = previous_mixins
+      @references = previous_references
     end
 
     def visit_call_node(node)
       return unless @current_class
 
-      check_mixin_calls(node)
+      track_constants(node.receiver)
+      track_constants_in_arguments(node.arguments)
 
-      check_array_include(node)
+      track_mixin_calls(node)
 
       receiver = extract_receiver(node)
       @messages.add(receiver) if receiver && !is_self_call?(receiver)
@@ -84,12 +92,71 @@ module Klarity
     def visit_def_node(node)
       return unless @current_class
 
-      check_keyword_defaults(node.parameters)
+      track_constants(node.parameters)
+
+      super
+    end
+
+    def visit_when_node(node)
+      return unless @current_class
+
+      node.conditions.each { |cond| track_constants(cond) }
 
       super
     end
 
     private
+
+    def track_constants(node)
+      return unless node
+
+      case node
+      when Prism::ConstantReadNode
+        @references << node.name.to_s
+      when Prism::ConstantPathNode
+        @references << build_path(node)
+      when Prism::ArrayNode
+        node.elements.each { |el| track_constants(el) }
+      when Prism::ArgumentsNode
+        node.arguments&.each { |arg| track_constants(arg) }
+      when Prism::CallNode
+        track_constants(node.receiver)
+        node.arguments&.arguments&.each { |arg| track_constants(arg) }
+      end
+    end
+
+    def track_constants_in_arguments(arguments_node)
+      return unless arguments_node
+
+      if arguments_node.respond_to?(:arguments)
+        arguments_node.arguments.each { |arg| track_constants(arg) }
+      elsif arguments_node.respond_to?(:requireds)
+        track_constants_in_parameters(arguments_node)
+      end
+    end
+
+    def track_mixin_calls(node)
+      return unless %i[include extend prepend].include?(node.name)
+
+      node.arguments&.arguments&.each do |arg|
+        case arg
+        when Prism::ConstantReadNode
+          @mixins << arg.name.to_s
+        when Prism::ConstantPathNode
+          @mixins << build_path(arg)
+        end
+      end
+    end
+
+    def track_constants_in_parameters(parameters_node)
+      parameters_node.requireds&.each { |p| track_constants(p) }
+      parameters_node.optionals&.each { |p| track_constants(p) }
+      parameters_node.rest && track_constants(parameters_node.rest)
+      parameters_node.posts&.each { |p| track_constants(p) }
+      parameters_node.keywords&.each { |p| track_constants(p) }
+      parameters_node.keyword_rest && track_constants(parameters_node.keyword_rest)
+      parameters_node.block && track_constants(parameters_node.block)
+    end
 
     def extract_name(node)
       case node
@@ -137,59 +204,14 @@ module Klarity
         receiver.name.to_s
       when Prism::ConstantPathNode
         build_path(receiver)
+      when Prism::LocalVariableReadNode, Prism::InstanceVariableReadNode,
+           Prism::ClassVariableReadNode, Prism::GlobalVariableReadNode
+        receiver.name.to_s
       end
     end
 
     def is_self_call?(_receiver)
       false
-    end
-
-    def check_mixin_calls(node)
-      return unless %i[include extend prepend].include?(node.name)
-
-      node.arguments&.arguments&.each do |arg|
-        case arg
-        when Prism::ConstantReadNode
-          @mixins << arg.name.to_s
-        when Prism::ConstantPathNode
-          @mixins << build_path(arg)
-        end
-      end
-    end
-
-    def check_array_include(node)
-      return unless node.name == :include?
-      return unless node.receiver.is_a?(Prism::ArrayNode)
-
-      node.receiver.elements.each do |element|
-        case element
-        when Prism::ConstantReadNode
-          @messages << element.name.to_s
-        when Prism::ConstantPathNode
-          @messages << build_path(element)
-        end
-      end
-    end
-
-    def check_keyword_defaults(parameters)
-      return unless parameters&.keywords
-
-      parameters.keywords.each do |keyword_param|
-        next unless keyword_param.is_a?(Prism::OptionalKeywordParameterNode)
-
-        value = keyword_param.value
-        next unless value
-
-        extract_dependency_from_node(value)
-      end
-    end
-
-    def extract_dependency_from_node(node)
-      case node
-      when Prism::CallNode
-        receiver = extract_receiver(node)
-        @messages << receiver if receiver && node.name == :new
-      end
     end
 
     def save_current_results
@@ -199,6 +221,7 @@ module Klarity
         messages: @messages.to_a,
         inherits: @inherits,
         mixins: @mixins.to_a,
+        references: @references.to_a,
         dynamic: false
       }
     end
