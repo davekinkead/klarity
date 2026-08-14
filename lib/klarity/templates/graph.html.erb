@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Klarity: Dependency Graph Analysis</title>
   <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/layout-base@2.0.1/layout-base.js"></script>
+  <script src="https://unpkg.com/cose-base@2.2.0/cose-base.js"></script>
+  <script src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
@@ -143,7 +146,8 @@
     <div class="filter-section">
       <label>Layout</label>
       <select id="layout">
-        <option value="cose">Force-Directed</option>
+        <option value="fcose">Force-Directed</option>
+        <option value="cose">Force-Directed (Cose)</option>
         <option value="breadthfirst">Hierarchical</option>
         <option value="circle">Circular</option>
         <option value="grid">Grid</option>
@@ -203,35 +207,45 @@
       associations: '#1abc9c'
     };
     
+    // First pass: compute coupling scores and maxDegree so the layout
+    // can use them for per-node gravity / repulsion.
+    const nodeDegrees = {};
+    let maxDegree = 0;
+    Object.entries(DATA).forEach(([className, deps]) => {
+      const totalDeps = (deps.inherits?.length || 0) +
+                       (deps.mixins?.length || 0) +
+                       (deps.messages?.length || 0) +
+                       (deps.references?.length || 0) +
+                       (deps.dynamic?.length || 0) +
+                       (deps.associations?.length || 0);
+      nodeDegrees[className] = totalDeps;
+      maxDegree = Math.max(maxDegree, totalDeps);
+    });
+
+    // Sqrt scaling: high-coupling nodes are disproportionately larger.
+    // Larger nodes also push the layout apart (cose uses node size for collision).
+    const minSize = 30;
+    const maxSize = 200;
+    const sqrtMax = Math.sqrt(maxDegree) || 1;
+    const sizeFor = (degree) => minSize + (Math.sqrt(degree) / sqrtMax) * (maxSize - minSize);
+
     function transformData(data) {
       const elements = { nodes: [], edges: [] };
       const processedNodes = new Set();
       const actualFiles = new Set(Object.keys(data));
-      const nodeDegrees = {};
-
-      let maxDegree = 0;
-      Object.entries(data).forEach(([className, deps]) => {
-        const totalDeps = (deps.inherits?.length || 0) +
-                         (deps.mixins?.length || 0) +
-                         (deps.messages?.length || 0) +
-                         (deps.references?.length || 0) +
-                         (deps.dynamic?.length || 0) +
-                         (deps.associations?.length || 0);
-        nodeDegrees[className] = totalDeps;
-        maxDegree = Math.max(maxDegree, totalDeps);
-      });
 
       Object.entries(data).forEach(([className, deps]) => {
         if (!processedNodes.has(className)) {
         const degree = nodeDegrees[className] || 0;
-        const nodeSize = 30 + (degree * 5);
+        const size = sizeFor(degree);
 
         elements.nodes.push({
           data: {
             id: className,
             label: className,
             isInternal: true,
-            degree: degree
+            degree: degree,
+            size: size
           }
         });
         processedNodes.add(className);
@@ -241,16 +255,15 @@
           deps[type]?.forEach(target => {
             if (!processedNodes.has(target)) {
               const degree = nodeDegrees[target] || 0;
-              const baseSize = 30;
-              const sizeMultiplier = Math.min(degree * 3, 50);
-              const nodeSize = baseSize + sizeMultiplier;
+              const size = sizeFor(degree);
 
               elements.nodes.push({
                 data: {
                   id: target,
                   label: target,
                   isInternal: actualFiles.has(target),
-                  degree: degree
+                  degree: degree,
+                  size: size
                 }
               });
               processedNodes.add(target);
@@ -281,8 +294,8 @@
           style: {
             'background-color': '#ecf0f1',
             'label': 'data(label)',
-            'width': 'mapData(degree, 0, 200, 30, 150)',
-            'height': 'mapData(degree, 0, 200, 30, 150)',
+            'width': 'data(size)',
+            'height': 'data(size)',
             'font-size': '11px',
             'text-valign': 'center',
             'text-halign': 'center',
@@ -333,17 +346,39 @@
         }
       ],
       layout: {
-        name: 'cose',
-        animate: false,
-        nodeRepulsion: () => 800000,
-        idealEdgeLength: () => 250,
-        componentSpacing: 200,
-        nodeOverlap: 10,
-        gravity: 0.0025,
-        numIter: 5000,
-        padding: 30,
+        name: 'fcose',
+        quality: 'default',
+        randomize: true,
         fit: true,
-        randomize: true
+        padding: 30,
+        animate: false,
+
+        // Per-node repulsion: low-coupling nodes get pushed away from the
+        // dense cluster, leaving high-coupling hubs anchored at the center
+        // of mass. fcose's gravity is a global constant, so we approximate
+        // "more gravity pull for hubs" by giving them less repulsion.
+        nodeRepulsion: (node) => {
+          const degree = node.data('degree') || 0;
+          if (maxDegree === 0) return 6000;
+          const normalized = Math.sqrt(degree) / Math.sqrt(maxDegree);
+          return 10000 - normalized * 6000; // 4000 (hubs) to 10000 (leaves)
+        },
+
+        // Edge lengths pull the group together
+        idealEdgeLength: 80,
+
+        // Edge bundling - lower = edges bend closer together, reducing overlap
+        edgeElasticity: 0.3,
+
+        // Global gravity toward centre
+        gravity: 0.3,
+
+        // Spectral phase spacing (also acts as a soft wall during force phase)
+        nodeSeparation: 100,
+
+        numIter: 5000,
+        packComponents: true,
+        tile: false
       }
     });
     
@@ -415,14 +450,38 @@
     function getLayoutConfig(layoutName) {
       const baseConfig = { animate: false, name: layoutName };
 
+      if (layoutName === 'fcose') {
+        return {
+          name: 'fcose',
+          quality: 'default',
+          randomize: true,
+          fit: true,
+          padding: 30,
+          animate: false,
+          nodeRepulsion: (node) => {
+            const degree = node.data('degree') || 0;
+            if (maxDegree === 0) return 6000;
+            const normalized = Math.sqrt(degree) / Math.sqrt(maxDegree);
+            return 10000 - normalized * 6000;
+          },
+          idealEdgeLength: 80,
+          edgeElasticity: 0.3,
+          gravity: 0.3,
+          nodeSeparation: 100,
+          numIter: 5000,
+          packComponents: true,
+          tile: false
+        };
+      }
+
       if (layoutName === 'cose') {
         return {
           ...baseConfig,
-          nodeRepulsion: () => 800000,
-          idealEdgeLength: () => 250,
-          componentSpacing: 200,
-          nodeOverlap: 10,
-          gravity: 0.0025,
+          nodeRepulsion: () => 2000000,
+          idealEdgeLength: () => 400,
+          componentSpacing: 250,
+          nodeOverlap: 40,
+          gravity: 0.001,
           numIter: 5000,
           padding: 30,
           fit: true,
