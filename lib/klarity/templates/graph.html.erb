@@ -334,15 +334,16 @@
       ],
       layout: {
         name: 'cose',
-        animate: true,
-        animationDuration: 500,
-        nodeRepulsion: 75000,
-        idealEdgeLength: 150,
-        componentSpacing: 300,
-        nodeOverlap: 60,
-        gravity: 0.01,
-        numIter: 2500,
-        padding: 50
+        animate: false,
+        nodeRepulsion: () => 800000,
+        idealEdgeLength: () => 250,
+        componentSpacing: 200,
+        nodeOverlap: 10,
+        gravity: 0.0025,
+        numIter: 5000,
+        padding: 30,
+        fit: true,
+        randomize: true
       }
     });
     
@@ -412,21 +413,23 @@
     });
     
     function getLayoutConfig(layoutName) {
-      const baseConfig = { animate: true, animationDuration: 500, name: layoutName };
-      
+      const baseConfig = { animate: false, name: layoutName };
+
       if (layoutName === 'cose') {
         return {
           ...baseConfig,
-          nodeRepulsion: 75000,
-          idealEdgeLength: 150,
-          componentSpacing: 300,
-          nodeOverlap: 60,
-          gravity: 0.01,
-          numIter: 2500,
-          padding: 50
+          nodeRepulsion: () => 800000,
+          idealEdgeLength: () => 250,
+          componentSpacing: 200,
+          nodeOverlap: 10,
+          gravity: 0.0025,
+          numIter: 5000,
+          padding: 30,
+          fit: true,
+          randomize: true
         };
       }
-      
+
       return baseConfig;
     }
     
